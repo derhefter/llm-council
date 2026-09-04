@@ -14,13 +14,36 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 - Contains `COUNCIL_MODELS` (list of OpenRouter model identifiers)
 - Contains `CHAIRMAN_MODEL` (model that synthesizes final answer)
 - Uses environment variable `OPENROUTER_API_KEY` from `.env`
+- `require_api_key()` raises `MissingAPIKeyError` with an actionable message - never let a missing key surface as "all models failed"
+- `DATA_DIR` is **absolute** (`~/.llm-council/conversations`, override via `LLM_COUNCIL_HOME`). It must stay absolute: the CLI and MCP server run from arbitrary working directories and would otherwise create a second store per repo.
 - Backend runs on **port 8001** (NOT 8000 - user had another app on 8000)
 
+**`profiles.py`**
+- `Profile` = models + chairman + rubric + output schema + context budget + `peer_review` flag
+- `quick` (2 models, no Stage 2), `decision` (default), `research`
+- Every entry point takes a `Profile`; `_resolve(None)` falls back to `decision`
+- `peer_review=False` skips Stage 2 entirely - both `run_full_council` and the streaming endpoint must honour this (the stream emits `stage2_skipped`)
+
+**`context.py`**
+- `ContextBlock` + `build_prompt()`: context blocks first, question last
+- Blocks share `profile.max_context_chars` evenly; truncation is head+tail with a visible marker
+- `git_diff_block()` / `repo_info_block()` shell out to git and return `None` outside a repo
+
+**`cli.py`** - `council ask | profiles | log`, installed via `[project.scripts]`
+
+**`mcp_server.py`** - MCP (SDK **2.x**: `MCPServer`, not `FastMCP`)
+- `council_start` + `council_result` are split because a deep run takes 1-3 minutes, longer than most MCP clients wait on one tool call
+- `council_ask` is blocking and quick-profile only
+- `_RUNS` is in-memory: run ids do not survive a server restart
+
+**`export.py`** - ADR writer, `docs/decisions/NNNN-slug.md`, numbering from existing files
+
 **`openrouter.py`**
-- `query_model()`: Single async model query
+- `query_model()`: Single async model query, 2 retries with exponential backoff on timeouts / 429 / 5xx
 - `query_models_parallel()`: Parallel queries using `asyncio.gather()`
-- Returns dict with 'content' and optional 'reasoning_details'
+- Returns dict with 'content', 'reasoning_details', 'usage' and 'duration'
 - Graceful degradation: returns None on failure, continues with successful responses
+- **Exception:** `OpenRouterAuthError` (401/403) propagates instead of degrading - a bad key breaks every model, so failing loudly is correct
 
 **`council.py`** - The Core Logic
 - `stage1_collect_responses()`: Parallel queries to all council models
@@ -38,7 +61,7 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 - JSON-based conversation storage in `data/conversations/`
 - Each conversation: `{id, created_at, messages[]}`
 - Assistant messages contain: `{role, stage1, stage2, stage3}`
-- Note: metadata (label_to_model, aggregate_rankings) is NOT persisted to storage, only returned via API
+- `add_assistant_message(..., metadata=...)` persists `label_to_model`, `aggregate_rankings`, `profile` and `run_stats`, so a reopened conversation still shows its rankings. The field is optional on read, so pre-0.2 files still load.
 
 **`main.py`**
 - FastAPI app with CORS enabled for localhost:5173 and localhost:3000
@@ -131,6 +154,15 @@ Models are hardcoded in `backend/config.py`. Chairman can be same or different f
 2. **CORS Issues**: Frontend must match allowed origins in `main.py` CORS middleware
 3. **Ranking Parse Failures**: If models don't follow format, fallback regex extracts any "Response X" patterns in order
 4. **Missing Metadata**: Metadata is ephemeral (not persisted), only available in API responses
+
+## Known biases in the ranking (Phase 2 backlog)
+
+Deliberately still open, to be fixed after a week of real usage:
+1. **Models rank their own responses** - `stage2_collect_rankings()` sends one shared prompt to all `profile.models`. Fix: one prompt per evaluator excluding its own answer, then normalise positions to percentiles since lists become n-1 long.
+2. **The chairman sees model names** - `build_chairman_prompt()` emits `Model: {name}`, which undoes Stage 2's anonymisation. Fix: label-only, de-anonymise in the output layer.
+3. Rankings correlate with verbosity. The rubric (per profile) mitigates but does not solve this.
+
+Report the ranking as a weak signal, never as a verdict.
 
 ## Future Enhancement Ideas
 

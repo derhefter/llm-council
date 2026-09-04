@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "council": {
+      "command": "uv",
+      "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}/..", "python", "-m", "backend.mcp_server"]
+    }
+  }
+}
