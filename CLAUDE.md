@@ -175,7 +175,23 @@ Report the ranking as a weak signal, never as a verdict.
 
 ## Testing Notes
 
-Use `test_openrouter.py` to verify API connectivity and test different model identifiers before adding to council. The script tests both streaming and non-streaming modes.
+```bash
+uv sync --group dev
+uv run pytest        # 69 tests, ~1s, no API key
+```
+
+`tests/conftest.py` replaces `query_model` - the single external dependency -
+with a stub that answers by prompt type. So the suite runs offline and CI needs
+no secret. See `tests/README.md` for what each file covers.
+
+**What the suite does not prove:** that a model id in `config.py` still exists on
+OpenRouter, or that the key is valid. Only a real run shows that; the escalation
+procedure is in `ANLEITUNG-KONZIL.md`.
+
+When changing `council.py`, `context.py` or `main.py`, run the suite before
+pushing - it covers the anonymisation in Stage 2, the per-profile rubric and
+output schema, metadata persistence and the streaming event sequence, all of
+which are easy to break silently.
 
 ## Data Flow Summary
 
