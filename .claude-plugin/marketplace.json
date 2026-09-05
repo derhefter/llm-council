@@ -1,0 +1,11 @@
+{
+  "name": "llm-council",
+  "owner": {"name": "derhefter"},
+  "plugins": [
+    {
+      "name": "council",
+      "source": "./plugin",
+      "description": "Ask a council of several LLMs a hard question and get a synthesized answer with explicit dissent."
+    }
+  ]
+}

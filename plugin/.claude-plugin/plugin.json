@@ -1,0 +1,6 @@
+{
+  "name": "council",
+  "description": "Ask a council of several LLMs a hard question and get a synthesized answer with explicit dissent.",
+  "version": "0.1.0",
+  "author": {"name": "derhefter"}
+}

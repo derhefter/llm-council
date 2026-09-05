@@ -14,6 +14,70 @@ In a bit more detail, here is what happens when you submit a query:
 
 This project was 99% vibe coded as a fun Saturday hack because I wanted to explore and evaluate a number of LLMs side by side in the process of [reading books together with LLMs](https://x.com/karpathy/status/1990577951671509438). It's nice and useful to see multiple responses side by side, and also the cross-opinions of all LLMs on each other's outputs. I'm not going to support it in any way, it's provided here as is for other people's inspiration and I don't intend to improve it. Code is ephemeral now and libraries are over, ask your LLM to change it in whatever way you like.
 
+## Anleitung ohne Technik
+
+Wann sich ein Konzil-Lauf lohnt, wie man eine brauchbare Frage stellt und was man
+dem Ergebnis nicht glauben darf: **[ANLEITUNG-KONZIL.md](ANLEITUNG-KONZIL.md)** —
+geschrieben für Nutzung, nicht für Entwicklung.
+
+## Use it from any repository
+
+The council is not only a web app. It runs headless, so you can call it from any
+project.
+
+### CLI
+
+```bash
+uv tool install --editable .          # once; puts `council` on your PATH
+
+council profiles                      # what is available
+council ask "Monorepo oder Polyrepo fuer 4 Entwickler?"
+council ask "Wo ist der Bias in dieser Datei?" --file backend/council.py
+council ask "Ist dieser Refactor sicher?" --diff main --adr
+council log                           # recent runs
+```
+
+Useful flags: `--profile`, `--file` (repeatable), `--diff [REF]`, `--stdin`,
+`--out FILE`, `--json`, `--adr` (writes `docs/decisions/NNNN-slug.md` into the
+current repo), `--quiet`.
+
+Runs are stored in `~/.llm-council/conversations` (override with
+`LLM_COUNCIL_HOME`), so the CLI, the MCP server and the web UI share one history.
+
+### Claude Code (MCP + skill)
+
+```bash
+claude mcp add --scope user council -- \
+  uv run --directory /path/to/llm-council python -m backend.mcp_server
+```
+
+That makes `council_start`, `council_result`, `council_ask`, `council_profiles`
+and `council_write_adr` available in every project. Install the bundled plugin for
+the `/council` command and the gatekeeper skill:
+
+```bash
+/plugin marketplace add /path/to/llm-council
+/plugin install council@llm-council
+```
+
+### Profiles
+
+| Profile | Models | Peer review | Calls | Latency | For |
+|---|---|---|---|---|---|
+| `quick` | 2 | no | ~3 | ~20-40s | cheap second opinion |
+| `decision` | 4 | yes | ~9 | ~90-180s | architecture / technical decisions |
+| `research` | 4 | yes | ~9 | ~90-180s | open questions |
+
+### When it is worth the money
+
+A `decision` run costs ~9 model calls and 1-3 minutes. Only spend that when the
+question is expensive to reverse, has no cheap ground truth (no test or benchmark
+settles it), and is open enough that different models explore different branches.
+Everything else: ask one model.
+
+The peer ranking measures how models rate each other's writing, not correctness.
+Treat it as a weak signal.
+
 ## Setup
 
 ### 1. Install Dependencies
